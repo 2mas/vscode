@@ -173,16 +173,29 @@ abstract class AbstractMoveLinesAction extends EditorAction {
 	public run(accessor: ServicesAccessor, editor: ICodeEditor): void {
 		const languageConfigurationService = accessor.get(ILanguageConfigurationService);
 
-		const commands: ICommand[] = [];
 		const selections = editor.getSelections() || [];
+		const newSelections: Selection[] = [];
 		const autoIndent = editor.getOption(EditorOption.autoIndent);
 
-		for (const selection of selections) {
-			commands.push(new MoveLinesCommand(selection, this.down, autoIndent, languageConfigurationService));
+		editor.pushUndoStop();
+
+		// Selections must be processed in the right order if they are consecutive
+		// Meaning, the last selection must be processed first if the direction of the move is down
+		// Otherwise, they will overwrite each others positions
+		for (const selection of this.down ? selections.reverse() : selections) {
+			// Commands must be executed individually to store the new selections after a move
+			editor.executeCommand(this.id, new MoveLinesCommand(selection, this.down, autoIndent, languageConfigurationService));
+
+			const newSelection = editor.getSelection();
+			if (newSelection) {
+				newSelections.push(newSelection);
+			}
 		}
 
-		editor.pushUndoStop();
-		editor.executeCommands(this.id, commands);
+		if (newSelections.length) {
+			editor.setSelections(newSelections);
+		}
+
 		editor.pushUndoStop();
 	}
 }
