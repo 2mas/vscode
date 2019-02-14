@@ -193,6 +193,11 @@ abstract class AbstractMoveLinesAction extends EditorAction {
 		}
 
 		if (newSelections.length > 1) {
+			// If selection order was previously reversed we need to restore them
+			if (this.down) {
+				newSelections.reverse();
+			}
+
 			editor.setSelections(newSelections);
 		}
 
