@@ -186,13 +186,13 @@ abstract class AbstractMoveLinesAction extends EditorAction {
 			// Commands must be executed individually to store the new selections after a move
 			editor.executeCommand(this.id, new MoveLinesCommand(selection, this.down, autoIndent, languageConfigurationService));
 
-			const newSelection = editor.getSelection();
-			if (newSelection) {
-				newSelections.push(newSelection);
+			const editorSelection = editor.getSelection();
+			if (editorSelection !== null) {
+				newSelections.push(editorSelection);
 			}
 		}
 
-		if (newSelections.length) {
+		if (newSelections.length > 1) {
 			editor.setSelections(newSelections);
 		}
 
