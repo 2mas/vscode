@@ -172,36 +172,68 @@ abstract class AbstractMoveLinesAction extends EditorAction {
 
 	public run(accessor: ServicesAccessor, editor: ICodeEditor): void {
 		const languageConfigurationService = accessor.get(ILanguageConfigurationService);
+		const commands: ICommand[] = [];
 
-		const selections = editor.getSelections() || [];
 		const newSelections: Selection[] = [];
+		let selections = editor.getSelections() || [];
+		let movingMultipleLines = false;
+		let selectionDirectionDown = true;
+
 		const autoIndent = editor.getOption(EditorOption.autoIndent);
 
-		editor.pushUndoStop();
+		if (selections.length > 1) {
+			movingMultipleLines = selections[0].endLineNumber !== selections[selections.length - 1].endLineNumber;
 
-		// Selections must be processed in the right order if they are consecutive
-		// Meaning, the last selection must be processed first if the direction of the move is down
-		// Otherwise, they will overwrite each others positions
-		for (const selection of this.down ? selections.reverse() : selections) {
-			// Commands must be executed individually to store the new selections after a move
-			editor.executeCommand(this.id, new MoveLinesCommand(selection, this.down, autoIndent, languageConfigurationService));
+			if (movingMultipleLines) {
+				// Work only with one selection per line
+				selections = selections.filter((s, idx, arr) => {
+					return arr.map(sel => sel['endLineNumber']).indexOf(s['endLineNumber']) === idx;
+				});
 
-			const editorSelection = editor.getSelection();
-			if (editorSelection !== null) {
-				newSelections.push(editorSelection);
+				selectionDirectionDown = selections[0].endLineNumber < selections[selections.length - 1].endLineNumber;
 			}
 		}
 
-		if (newSelections.length > 1) {
-			// If selection order was previously reversed we need to restore them
-			if (this.down) {
-				newSelections.reverse();
-			}
+		if (movingMultipleLines) {
+			editor.pushUndoStop();
 
-			editor.setSelections(newSelections);
+			// Selections must be processed in the right order if they are consecutive
+			// Meaning, the last selection must be processed first if the direction of the move is down
+			// Otherwise, they will overwrite each others positions
+			if (selectionDirectionDown === this.down) {
+				selections.reverse();
+			}
 		}
 
-		editor.pushUndoStop();
+		for (const selection of selections) {
+			if (movingMultipleLines) {
+				// Commands must be executed individually to store the new selections after a move
+				editor.executeCommand(this.id, new MoveLinesCommand(selection, this.down, autoIndent, languageConfigurationService));
+
+				const editorSelection = editor.getSelection();
+				if (editorSelection !== null) {
+					newSelections.push(editorSelection);
+				}
+			} else {
+				commands.push(new MoveLinesCommand(selection, this.down, autoIndent, languageConfigurationService));
+			}
+		}
+
+		if (movingMultipleLines) {
+			if (newSelections.length > 1) {
+				// If selection order was previously reversed we need to restore them
+				if (selectionDirectionDown === this.down) {
+					newSelections.reverse();
+				}
+				editor.setSelections(newSelections);
+			}
+
+			editor.pushUndoStop();
+		} else {
+			editor.pushUndoStop();
+			editor.executeCommands(this.id, commands);
+			editor.pushUndoStop();
+		}
 	}
 }
 
