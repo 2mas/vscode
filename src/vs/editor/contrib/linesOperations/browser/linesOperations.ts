@@ -220,7 +220,9 @@ abstract class AbstractMoveLinesAction extends EditorAction {
 					// If we are at the beginning/end of document and multiple lines are moved, abort.
 					// This is because after the first selection is processed, it keeps the same start/end line number
 					// and the upcoming selection will then take the first selections place
-					if ((selection.startLineNumber === 1 && !this.down) || (selection.endLineNumber === editor.getModel()?.getLineCount() && this.down)) {
+					const model = editor.getModel();
+					const lineCount = model !== null ? model.getLineCount() : 0;
+					if ((selection.startLineNumber === 1 && !this.down) || (selection.endLineNumber === lineCount && this.down)) {
 						editor.pushUndoStop();
 						return;
 					}
