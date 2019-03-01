@@ -185,54 +185,63 @@ abstract class AbstractMoveLinesAction extends EditorAction {
 			movingMultipleLines = selections[0].endLineNumber !== selections[selections.length - 1].endLineNumber;
 
 			if (movingMultipleLines) {
+				// Stash selections while processing, set new selections +/- line-change only
+				for (const selection of selections) {
+					const startCol = selection.getStartPosition().column;
+					const startLine = selection.getStartPosition().lineNumber;
+					const newStartLine = this.down ? startLine + 1 : startLine - 1;
+
+					const endCol = selection.getEndPosition().column;
+					const endLine = selection.getEndPosition().lineNumber;
+					const newEndLine = this.down ? endLine + 1 : endLine - 1;
+
+					newSelections.push(new Selection(newStartLine, startCol, newEndLine, endCol));
+				}
+
 				// Work only with one selection per line
 				selections = selections.filter((s, idx, arr) => {
 					return arr.map(sel => sel['endLineNumber']).indexOf(s['endLineNumber']) === idx;
 				});
 
 				selectionDirectionDown = selections[0].endLineNumber < selections[selections.length - 1].endLineNumber;
-			}
-		}
 
-		if (movingMultipleLines) {
-			editor.pushUndoStop();
+				editor.pushUndoStop();
 
-			// Selections must be processed in the right order if they are consecutive
-			// Meaning, the last selection must be processed first if the direction of the move is down
-			// Otherwise, they will overwrite each others positions
-			if (selectionDirectionDown === this.down) {
-				selections.reverse();
-			}
-		}
-
-		for (const selection of selections) {
-			if (movingMultipleLines) {
-				// Commands must be executed individually to store the new selections after a move
-				editor.executeCommand(this.id, new MoveLinesCommand(selection, this.down, autoIndent, languageConfigurationService));
-
-				const editorSelection = editor.getSelection();
-				if (editorSelection !== null) {
-					newSelections.push(editorSelection);
-				}
-			} else {
-				commands.push(new MoveLinesCommand(selection, this.down, autoIndent, languageConfigurationService));
-			}
-		}
-
-		if (movingMultipleLines) {
-			if (newSelections.length > 1) {
-				// If selection order was previously reversed we need to restore them
+				// Selections must be processed in the right order if they are consecutive
+				// Meaning, the last selection must be processed first if the direction of the move is down
+				// Otherwise, they will overwrite each others positions
 				if (selectionDirectionDown === this.down) {
-					newSelections.reverse();
+					selections.reverse();
 				}
-				editor.setSelections(newSelections);
 			}
 
-			editor.pushUndoStop();
-		} else {
-			editor.pushUndoStop();
-			editor.executeCommands(this.id, commands);
-			editor.pushUndoStop();
+			for (const selection of selections) {
+				if (movingMultipleLines) {
+					// If we are at the beginning/end of document and multiple lines are moved, abort.
+					// This is because after the first selection is processed, it keeps the same start/end line number
+					// and the upcoming selection will then take the first selections place
+					if ((selection.startLineNumber === 1 && !this.down) || (selection.endLineNumber === editor.getModel()?.getLineCount() && this.down)) {
+						editor.pushUndoStop();
+						return;
+					}
+
+					editor.executeCommand(this.id, new MoveLinesCommand(selection, this.down, autoIndent, languageConfigurationService));
+				} else {
+					commands.push(new MoveLinesCommand(selection, this.down, autoIndent, languageConfigurationService));
+				}
+			}
+
+			if (movingMultipleLines) {
+				if (newSelections.length > 1) {
+					editor.setSelections(newSelections);
+				}
+
+				editor.pushUndoStop();
+			} else {
+				editor.pushUndoStop();
+				editor.executeCommands(this.id, commands);
+				editor.pushUndoStop();
+			}
 		}
 	}
 }
